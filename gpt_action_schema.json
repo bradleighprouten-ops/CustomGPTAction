@@ -1,0 +1,499 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Engineering Reports RAG API",
+    "description": "Query engineering reports to retrieve relevant context for answering questions about building movement, retaining walls, and structural assessments.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://prointegration-avah-nomographical.ngrok-free.dev"
+    }
+  ],
+  "paths": {
+    "/api/query": {
+      "post": {
+        "operationId": "queryReports",
+        "summary": "Query engineering reports for relevant context",
+        "description": "Search through indexed engineering reports to find relevant paragraphs that can help answer questions about structural issues, building movement, retaining walls, etc.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["query"],
+                "properties": {
+                  "query": {
+                    "type": "string",
+                    "description": "The user's question or prompt to search for in the reports"
+                  },
+                  "report_type": {
+                    "type": "string",
+                    "description": "Optional filter by report type (e.g., 'building movement', 'retaining wall', 'foundation', 'structural', 'concrete assessment', 'slab edge dampness', or any custom type)"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful query with relevant report excerpts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "query": {
+                      "type": "string"
+                    },
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "text": {
+                            "type": "string",
+                            "description": "The relevant paragraph text from the report"
+                          },
+                          "report_id": {
+                            "type": "string",
+                            "description": "The J-number identifier of the report (e.g., J250254-1)"
+                          },
+                          "section": {
+                            "type": "string",
+                            "description": "The section of the report (Introduction, Background, Site Inspection, Discussion, Recommendation, Conclusion, Other)"
+                          },
+                          "report_type": {
+                            "type": "string",
+                            "description": "The type of report"
+                          },
+                          "page_number": {
+                            "type": "integer",
+                            "description": "The page number where this text appears"
+                          },
+                          "similarity_score": {
+                            "type": "number",
+                            "description": "Cosine similarity score from vector search"
+                          },
+                          "relevance_score": {
+                            "type": "number",
+                            "description": "Reranking relevance score (higher is more relevant)"
+                          }
+                        }
+                      }
+                    },
+                    "count": {
+                      "type": "integer",
+                      "description": "Number of results returned"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - query parameter missing"
+          },
+          "401": {
+            "description": "Unauthorized - invalid API key"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/review/query": {
+      "post": {
+        "operationId": "reviewQuery",
+        "summary": "Query similar paragraphs for review",
+        "description": "Submit paragraphs from discussion/conclusion sections to find the 3 most similar paragraphs from existing reports for each input paragraph.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["paragraphs", "report_type"],
+                "properties": {
+                  "paragraphs": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Array of paragraph texts from discussion/conclusion sections to find similar content for"
+                  },
+                  "report_type": {
+                    "type": "string",
+                    "description": "Report type to validate against database and filter results"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful query with similar paragraphs for each input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewQueryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - invalid report type or missing parameters"
+          },
+          "401": {
+            "description": "Unauthorized - invalid API key"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/review/annotate": {
+      "post": {
+        "operationId": "reviewAnnotate",
+        "summary": "Annotate PDF with highlights and recommendations",
+        "description": "Add yellow highlights and sticky notes to a PDF based on paragraph text, character spans, and recommendations.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["pdf_base64", "annotations"],
+                "properties": {
+                  "pdf_base64": {
+                    "type": "string",
+                    "description": "Base64 encoded PDF to annotate"
+                  },
+                  "annotations": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/AnnotationRequest"
+                    },
+                    "description": "Array of annotations to add to the PDF"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successfully annotated PDF",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewAnnotateResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - invalid API key"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/review/extract-paragraphs/{upload_id}": {
+      "get": {
+        "operationId": "extractParagraphsFromUpload",
+        "summary": "Extract paragraphs from uploaded PDF",
+        "description": "Extract paragraphs from discussion and conclusion sections of a previously uploaded PDF by its upload ID.",
+        "parameters": [
+          {
+            "name": "upload_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "The upload ID of the PDF file"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successfully extracted paragraphs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "upload_id": {
+                      "type": "integer"
+                    },
+                    "file_name": {
+                      "type": "string"
+                    },
+                    "report_type": {
+                      "type": "string"
+                    },
+                    "discussion_paragraphs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "text": {
+                            "type": "string"
+                          },
+                          "page": {
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    },
+                    "conclusion_paragraphs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "text": {
+                            "type": "string"
+                          },
+                          "page": {
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Upload not found"
+          },
+          "401": {
+            "description": "Unauthorized - invalid API key"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/review/annotate-by-id": {
+      "post": {
+        "operationId": "reviewAnnotateById",
+        "summary": "Annotate PDF by upload ID",
+        "description": "Add yellow highlights and sticky notes to a previously uploaded PDF referenced by its upload ID.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["upload_id", "annotations"],
+                "properties": {
+                  "upload_id": {
+                    "type": "integer",
+                    "description": "The upload ID of the PDF to annotate"
+                  },
+                  "annotations": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/AnnotationRequest"
+                    },
+                    "description": "Array of annotations to add to the PDF"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successfully annotated PDF",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewAnnotateResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Upload not found"
+          },
+          "401": {
+            "description": "Unauthorized - invalid API key"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ParagraphMatch": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "The matched paragraph text"
+          },
+          "report_id": {
+            "type": "string",
+            "description": "The J-number identifier of the report"
+          },
+          "section": {
+            "type": "string",
+            "description": "The section of the report"
+          },
+          "report_type": {
+            "type": "string",
+            "description": "The type of report"
+          },
+          "page_number": {
+            "type": "integer",
+            "description": "Page number where text appears"
+          },
+          "similarity_score": {
+            "type": "number",
+            "description": "Vector similarity score"
+          },
+          "relevance_score": {
+            "type": "number",
+            "description": "Reranking relevance score"
+          }
+        }
+      },
+      "ReviewQueryResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/ParagraphMatch"
+              }
+            },
+            "description": "Array of arrays - top 3 matches for each input paragraph"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "AnnotationRequest": {
+        "type": "object",
+        "required": ["paragraph_text", "spans", "page_hint", "recommendation"],
+        "properties": {
+          "paragraph_text": {
+            "type": "string",
+            "description": "The full paragraph text to locate in the PDF"
+          },
+          "spans": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              },
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "description": "Array of [start, end] character position pairs to highlight within the paragraph"
+          },
+          "page_hint": {
+            "type": "integer",
+            "description": "Starting page number to search for the paragraph (1-indexed)"
+          },
+          "recommendation": {
+            "type": "string",
+            "description": "Recommendation text to add as a sticky note"
+          }
+        }
+      },
+      "ReviewAnnotateResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "pdf_base64": {
+            "type": "string",
+            "description": "Base64 encoded annotated PDF"
+          },
+          "annotated_count": {
+            "type": "integer",
+            "description": "Number of successfully annotated paragraphs"
+          },
+          "error_count": {
+            "type": "integer",
+            "description": "Number of annotations that failed"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "Details of any errors encountered"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key"
+      }
+    }
+  }
+}
