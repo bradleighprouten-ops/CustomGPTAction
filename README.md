@@ -81,7 +81,7 @@ Access at `http://localhost:8000`
 4. Set authentication:
    - Type: API Key
    - Header name: `X-API-Key`
-   - Value: `SK-6egfst476yshjfjGBfyte8ui46768t7ijghgr6e4576rur`
+   - Value: ``
 
 #### Example GPT Prompt
 
